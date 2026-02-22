@@ -21,7 +21,7 @@ import Control.Applicative  ( liftA2, liftA3 )
 import Control.Monad.Except ( runExceptT, MonadError(..) )
 import Control.Monad.State  ( StateT, execStateT, get, put )
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans  ( lift )
+import Control.Monad.Trans  ( lift, liftIO )
 
 import Data.Bifunctor
 import Data.Foldable (traverse_)
@@ -194,9 +194,10 @@ recordConstructorType decls =
              (C.Clause _ _ _ (C.LHS _p [] []) (C.RHS _) NoWhere [] :| [])
           ]) | abstract /= AbstractDef && macro /= MacroDef -> do
           mkLet d
-
         C.NiceLoneConstructor{} -> failure
         C.NiceMutual{}        -> failure
+        -- QU: I don't know what is this
+        C.NiceRealInterleaved {} -> failure
         -- TODO: some of these cases might be __IMPOSSIBLE__
         C.Axiom{}             -> failure
         C.PrimitiveFunction{} -> failure
@@ -1615,7 +1616,7 @@ niceDecls warn ds ret = setCurrentRange ds $ computeFixitiesAndPolarities warn d
 
   -- We need to pass the fixities to the nicifier for clause grouping.
   fixs <- useScope scopeFixities
-  niceEnv <- NiceEnv safeButNotBuiltin <$> asksTC envCheckingWhere
+  niceEnv <- NiceEnv safeButNotBuiltin <$> asksTC envCheckingWhere <*> pure False
 
   -- Run nicifier.
   let (result, warns) = runNice niceEnv $ niceDeclarations fixs ds
@@ -1988,7 +1989,14 @@ instance ToAbstract NiceDeclaration where
       -- We only termination check blocks that do not have a measure.
       maybeToList <$> forM (List1.nonEmpty ds') \ ds' ->
         return $ A.Mutual (MutualInfo tc cc pc (fuseRange kwr ds)) ds'
-
+   
+    C.NiceRealInterleaved kwr tc cc pc sig ds -> do 
+      -- QU:TODO: Make sure they are all signatures
+      sig' <- catMaybes <$> toAbstract (List1.toList sig) 
+      ds' <- locallyTC eInterleavedMutual (const True) $ catMaybes <$> toAbstract (List1.toList ds)
+      fmap maybeToList $ fmap join $ forM (List1.nonEmpty ds') \ ds' -> forM (List1.nonEmpty sig') \ sig' ->
+        return $ A.RealInterleaved (MutualInfo tc cc pc (fuseRange kwr (sig <> ds))) sig' ds'
+        
   -- Type signatures
     C.FunSig r p a i m rel _ _ x t -> do
         let kind = if m == MacroDef then MacroName else FunName
@@ -2009,7 +2017,7 @@ instance ToAbstract NiceDeclaration where
         return $ singleton $ A.FunDef di x' cs
 
   -- Uncategorized function clauses
-    C.NiceFunClause _ _ _ _ _ _ (C.FunClause _ lhs _ _ _) ->
+    C.NiceFunClause _ _ _ _ _ _ (C.FunClause _ lhs _ _ _) -> do 
       typeError $ MissingTypeSignature $ MissingFunctionSignature lhs
     C.NiceFunClause{} -> __IMPOSSIBLE__
 
@@ -2357,8 +2365,10 @@ scopeCheckDataDef ::
   -> [NiceDeclaration]
        -- ^ The constructors of the data type.
   -> ScopeM A.Declaration
+-- QU:MARK
 scopeCheckDataDef r o a uc x pars cons =
   notAffectedByOpaque do
+    -- liftIO $ putStrLn "scopeCheckingDataDef"
     reportSLn "scope.data.def" 40 ("checking " ++ show o ++ " DataDef for " ++ prettyShow x)
     (p, ax) <- retrieveDataOrRecName IsData x
 
@@ -2527,11 +2537,12 @@ retrieveDataOrRecName dataOrRec x = do
     -- These checks give more precise errors than the generic 'checkForModuleClash' below.
     clashUnless x (ifThenElse dataOrRec DataName RecName) ax  -- Andreas 2019-07-07, issue #3892
     livesInCurrentModule ax  -- Andreas, 2017-12-04, issue #2862
-    clashIfModuleAlreadyDefinedInCurrentModule x ax  -- Andreas, 2019-07-07, issue #2576
-
-    -- Check that the generated module doesn't clash with a previously
-    -- defined module
-    checkForModuleClash x
+    interleaved <- asksTC envInterleavedMutual
+    unless interleaved $ do  
+      clashIfModuleAlreadyDefinedInCurrentModule x ax  -- Andreas, 2019-07-07, issue #2576
+      -- Check that the generated module doesn't clash with a previously
+      -- defined module
+      checkForModuleClash x
 
     return (p, ax)
 

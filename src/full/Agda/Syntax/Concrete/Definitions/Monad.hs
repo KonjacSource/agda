@@ -58,6 +58,7 @@ data NiceEnv = NiceEnv
        -- ^ We are in a module declared @--safe@ which is not a builtin module.
   , checkingWhere     :: WhereClause_
        -- ^ Are we checking a @where@ module?
+  , checkingInterleaved :: Bool
   }
 
 -- | Nicifier state.
@@ -79,6 +80,7 @@ data NiceState = NiceState
     -- ^ Stack of warnings. Head is last warning.
   , _nameId  :: NameId
     -- ^ We distinguish different 'NoName's (anonymous definitions) by a unique 'NameId'.
+  , _delayedLoneSigs :: [Name]
   }
 
 data LoneSig = LoneSig
@@ -117,6 +119,7 @@ initNiceState = NiceState
   , _covChk   = YesCoverageCheck
   , niceWarn  = []
   , _nameId   = NameId 1 noModuleNameHash
+  , _delayedLoneSigs = []
   }
 
 lensNameId :: Lens' NiceState NameId

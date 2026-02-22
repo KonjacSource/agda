@@ -555,6 +555,7 @@ data Declaration
   | PatternSyn  Range Name [WithHiding Name] Pattern
   | Mutual      KwRange [Declaration]
   | InterleavedMutual KwRange [Declaration]
+  | RealInterleavedMutual KwRange [Declaration] [Declaration]
   | Abstract    KwRange [Declaration]
   | Private     KwRange Origin [Declaration]
     -- ^ In "Agda.Syntax.Concrete.Definitions" we generate private blocks
@@ -624,6 +625,7 @@ isPragma = \case
     Syntax _ _              -> empty
     PatternSyn _ _ _ _      -> empty
     InterleavedMutual _ _   -> empty
+    RealInterleavedMutual _ _ _ -> empty
     LoneConstructor _ _     -> empty
     Postulate _ _           -> empty
     Primitive _ _           -> empty
@@ -1058,6 +1060,7 @@ instance HasRange Declaration where
   getRange (Record r _ _ _ _ _ _)  = r
   getRange (Mutual kwr ds)         = fuseRange kwr ds
   getRange (InterleavedMutual kwr ds) = fuseRange kwr ds
+  getRange (RealInterleavedMutual kwr sigs ds) = fuseRange kwr (sigs ++ ds)
   getRange (LoneConstructor kwr ds)= fuseRange kwr ds
   getRange (Abstract kwr ds)       = fuseRange kwr ds
   getRange (Generalize kwr ds)     = fuseRange kwr ds
@@ -1221,6 +1224,7 @@ instance KillRange Declaration where
   killRange (PatternSyn _ n ns p)   = killRangeN (PatternSyn noRange) n ns p
   killRange (Mutual _ d)            = killRangeN (Mutual empty) d
   killRange (InterleavedMutual _ d) = killRangeN (InterleavedMutual empty) d
+  killRange (RealInterleavedMutual _ s d) = killRangeN (RealInterleavedMutual empty) s d
   killRange (LoneConstructor _ d)   = killRangeN (LoneConstructor empty) d
   killRange (Abstract _ d)          = killRangeN (Abstract empty) d
   killRange (Private _ o d)         = killRangeN (Private empty) o d
@@ -1454,6 +1458,7 @@ instance NFData Declaration where
   rnf (PatternSyn _ a b c)    = rnf a `seq` rnf b `seq` rnf c
   rnf (Mutual _ a)            = rnf a
   rnf (InterleavedMutual _ a) = rnf a
+  rnf (RealInterleavedMutual _ s a) = rnf s `seq` rnf a
   rnf (LoneConstructor _ a)   = rnf a
   rnf (Abstract _ a)          = rnf a
   rnf (Private _ _ a)         = rnf a

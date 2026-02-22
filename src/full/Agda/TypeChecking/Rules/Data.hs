@@ -7,6 +7,8 @@ import Prelude hiding (null, not, (&&), (||) )
 import Control.Monad.Except ( MonadError(..), ExceptT(..), runExceptT )
 import Control.Monad.Trans.Maybe
 import Control.Exception as E
+import Control.Monad.Trans ( liftIO )
+
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -59,6 +61,7 @@ import qualified Agda.Utils.Set1 as Set1
 import Agda.Utils.Size
 
 import Agda.Utils.Impossible
+import Debug.Trace (trace)
 
 ---------------------------------------------------------------------------
 -- * Datatypes
@@ -76,10 +79,16 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
         -- Look up the type of the datatype.
         def <- instantiateDef =<< getConstInfo name
         t   <- instantiateFull $ defType def
-        let npars =
-              case theDef def of
-                DataOrRecSig n -> n
-                _              -> __IMPOSSIBLE__
+        (npars, cs', pcs') <- case theDef def of
+                  DataOrRecSig n -> return (n, [], [])
+                  DatatypeDefn defn -> do
+                    -- This branch is impossible for a non-interleaved mutual block
+                    interleaved <- asksTC (isJust . envMutualBlock)
+                    if interleaved then 
+                      return (_dataPars defn, _dataCons defn, _dataPathCons defn)
+                    else 
+                      __IMPOSSIBLE__
+                  _              -> __IMPOSSIBLE__
 
         -- If the data type is erased, then hard compile-time mode is
         -- entered.
@@ -147,11 +156,11 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
                   { _dataPars       = npars
                   , _dataIxs        = nofIxs
                   , _dataClause     = Nothing
-                  , _dataCons       = []     -- Constructors are added later
+                  , _dataCons       = cs'     -- Constructors are added later
                   , _dataSort       = s
                   , _dataAbstr      = Info.defAbstract i
                   , _dataMutual     = Nothing
-                  , _dataPathCons   = []     -- Path constructors are added later
+                  , _dataPathCons   = pcs'     -- Path constructors are added later
                   , _dataTranspIx   = Nothing -- Generated later if nofIxs > 0.
                   , _dataTransp     = Nothing -- Added later
                   }
@@ -182,7 +191,7 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
                 checkIndexSorts s' ixTel
 
             -- Return the data definition
-            return dataDef{ _dataPathCons = catMaybes pathCons
+            return dataDef{ _dataPathCons = pcs' ++ catMaybes pathCons
                           }
 
         let cons   = map A.axiomName cs  -- get constructor names
@@ -199,7 +208,7 @@ checkDataDef i name uc (A.DataDefParams gpars ps) cs =
         -- Add the datatype to the signature with its constructors.
         -- It was previously added without them.
         addConstant' name defaultArgInfo t $ DatatypeDefn
-            dataDef{ _dataCons = cons
+            dataDef{ _dataCons = cs' ++ cons
                    , _dataTranspIx = mtranspix
                    , _dataTransp   = transpFun
                    }

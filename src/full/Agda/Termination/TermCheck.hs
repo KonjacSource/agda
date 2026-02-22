@@ -106,6 +106,7 @@ termDecl' = \case
     A.Field {}            -> return mempty
     A.Primitive {}        -> return mempty
     A.Mutual _ ds         -> termMutual $ getNames ds
+    A.RealInterleaved _ ss ds -> termMutual $ getNames ss
     A.Section _ _ _ _ ds  -> foldMap termDecl' ds
         -- section structure can be ignored as we are termination checking
         -- definitions lifted to the top-level
@@ -139,6 +140,7 @@ termDecl' = \case
     getName (A.FunDef i x cs)   = [x]
     getName (A.RecDef _ x _ _ _ _ ds)   = x : getNames ds
     getName (A.Mutual _ ds)             = getNames ds
+    getName (A.RealInterleaved _ ss ds) = getNames ss 
     getName (A.Section _ _ _ _ ds)      = getNames ds
     getName (A.ScopedDecl _ ds)         = getNames ds
     getName (A.UnquoteDecl _ _ xs _)    = xs

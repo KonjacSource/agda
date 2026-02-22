@@ -233,8 +233,7 @@ checkFunDef' :: Type             -- ^ the type we expect the function to have
              -> QName            -- ^ the name of the function
              -> [A.Clause]       -- ^ the clauses to check
              -> TCM ()
-checkFunDef' t ai extlam with i name cs =
-  checkFunDefS t ai extlam with i name Nothing cs
+checkFunDef' t ai extlam with i name cs = checkFunDefS t ai extlam with i name Nothing cs
 
 -- | Type check a definition by pattern matching.
 checkFunDefS :: Type             -- ^ the type we expect the function to have
@@ -251,6 +250,7 @@ checkFunDefS :: Type             -- ^ the type we expect the function to have
              -> [A.Clause]       -- ^ the clauses to check
              -> TCM ()
 checkFunDefS t ai extlam with i name withSubAndLets cs = do
+    interleaved <- asksTC envInterleavedMutual
 
     traceCall (CheckFunDefCall (getRange i) name True) $ do
         reportSDoc "tc.def.fun" 10 $
@@ -378,7 +378,7 @@ checkFunDefS t ai extlam with i name withSubAndLets cs = do
         -- record→copattern translation, since we might need the
         -- previous clauses to come up with the types of the projected
         -- fields; see 'test/Succeed/IApplyRecConstrInline'.
-        modifyFunClauses name (const [])
+        unless interleaved $ modifyFunClauses name (const [])
 
         -- Check if the function is injective.
         -- Andreas, 2015-07-01 we do it here in order to resolve metas
@@ -409,9 +409,15 @@ checkFunDefS t ai extlam with i name withSubAndLets cs = do
         reportSLn  "tc.cc.type" 80 $ show fullType
 
         -- Coverage check and compile the clauses
-        (mst, _recordExpressionBecameCopatternLHS, cc) <- Bench.billTo [Bench.Coverage] $
-          unsafeInTopContext $ compileClauses (if isSystem then Nothing else (Just (name, fullType)))
-                                        cs
+        (mst, _recordExpressionBecameCopatternLHS, cc) <- 
+        
+            if interleaved then 
+              pure (Nothing, False, Nothing)
+            else 
+              Bench.billTo [Bench.Coverage] $
+              unsafeInTopContext $ do
+                (a, b, c) <- compileClauses (if isSystem then Nothing else (Just (name, fullType))) cs
+                pure (a, b, Just c)
         -- Andreas, 2019-10-21 (see also issue #4142):
         -- We ignore whether the clause compilation turned some
         -- record expressions into copatterns
@@ -450,7 +456,7 @@ checkFunDefS t ai extlam with i name withSubAndLets cs = do
            set funAbstr_ (Info.defAbstract i) $
            fun
              { _funClauses        = cs
-             , _funCompiled       = Just cc
+             , _funCompiled       = cc
              , _funSplitTree      = mst
              , _funInv            = inv
              , _funOpaque         = Info.defOpaque i
@@ -460,7 +466,7 @@ checkFunDefS t ai extlam with i name withSubAndLets cs = do
              }
           lang <- getLanguage
           useTerPragma $
-            updateDefCopatternLHS (const $ hasProjectionPatterns cc) $
+            updateDefCopatternLHS (const $ maybe False hasProjectionPatterns cc) $
             (defaultDefn ai name fullType lang defn)
 
         reportSDoc "tc.def.fun" 10 $ do

@@ -54,6 +54,7 @@ data NiceDeclaration
   | NiceField Range Access IsAbstract IsInstance TacticAttribute Name (Arg Expr)
   | PrimitiveFunction Range Access IsAbstract Name (Arg Expr)
   | NiceMutual KwRange TerminationCheck CoverageCheck PositivityCheck (List1 NiceDeclaration)
+  | NiceRealInterleaved KwRange TerminationCheck CoverageCheck PositivityCheck (List1 NiceDeclaration) (List1 NiceDeclaration)
   | NiceModule Range Access IsAbstract Erased QName Telescope
       [Declaration]
   | NiceModuleMacro Range Access Erased Name ModuleApplication
@@ -206,6 +207,7 @@ instance HasRange NiceDeclaration where
   getRange (Axiom r _ _ _ _ _ _)           = r
   getRange (NiceField r _ _ _ _ _ _)       = r
   getRange (NiceMutual kwr _ _ _ ds)       = fuseRange kwr ds
+  getRange (NiceRealInterleaved kwr _ _ _ ss ds) = fuseRange kwr (ss <> ds)
   getRange (NiceModule r _ _ _ _ _ _ )     = r
   getRange (NiceModuleMacro r _ _ _ _ _ _) = r
   getRange (NiceOpen kwr x dir)            = getRange (kwr, x, dir)
@@ -233,6 +235,7 @@ instance Pretty NiceDeclaration where
     NiceField _ _ _ _ _ x _        -> text "field" <+> pretty x
     PrimitiveFunction _ _ _ x _    -> text "primitive" <+> pretty x
     NiceMutual{}                   -> text "mutual"
+    NiceRealInterleaved {}         -> text "interleaved mutual"
     NiceOpaque _ _ ds              -> text "opaque" <+> nest 2 (vcat (map pretty ds))
     NiceModule _ _ _ _ x _ _       -> text "module" <+> pretty x <+> text "where"
     NiceModuleMacro _ _ _ x _ _ _  -> text "module" <+> pretty x <+> text "= ..."
@@ -257,6 +260,7 @@ declName :: NiceDeclaration -> String
 declName Axiom{}             = "Postulates"
 declName NiceField{}         = "Fields"
 declName NiceMutual{}        = "Mutual blocks"
+declName NiceRealInterleaved{} = "Interleaved Mutual blocks"
 declName NiceModule{}        = "Modules"
 declName NiceModuleMacro{}   = "Modules"
 declName NiceOpen{}          = "Open declarations"

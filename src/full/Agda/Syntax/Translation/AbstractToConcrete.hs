@@ -1340,7 +1340,8 @@ instance ToConcrete A.Declaration where
       (x',cs') <- first unsafeQNameToName <$> toConcrete (x, map Constr cs)
       return [ C.RecordDef (getRange i) x' dirs (catMaybes tel') cs' ]
 
-  toConcrete (A.Mutual i ds) = pure . C.Mutual empty <$> declsToConcrete (List1.toList ds)
+  toConcrete (A.Mutual i ds) = (pure . C.Mutual empty) <$> declsToConcrete (List1.toList ds)
+  toConcrete (A.RealInterleaved i ss ds) = (\ss ds -> pure $ C.RealInterleavedMutual empty ss ds) <$> declsToConcrete (List1.toList ss) <*> declsToConcrete (List1.toList ds)
 
   toConcrete (A.Section i erased x (A.GeneralizeTel _ tel) ds) = do
     x <- toConcrete x

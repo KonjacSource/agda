@@ -1417,7 +1417,8 @@ Generalize : 'variable' Block0(ModalArgTypeSigs)
 -- Mutually recursive declarations.
 Mutual :: { Declaration }
 Mutual : 'mutual' Declarations0  { Mutual (kwRange $1) $2 }
-       | 'interleaved' 'mutual' Declarations0 { InterleavedMutual (kwRange ($1,$2)) $3 }
+       | 'interleaved' 'mutual' Declarations0 'where' Declarations0 { RealInterleavedMutual (kwRange ($1, $2)) $3 $5}
+      --  | 'interleaved' 'mutual' Declarations0 { InterleavedMutual (kwRange ($1,$2)) $3 }
 
 -- Abstract declarations.
 Abstract :: { Declaration }

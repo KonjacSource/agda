@@ -204,6 +204,7 @@ instance Hilite A.Declaration where
       A.Field _di x e                        -> hlField x <> hl e
       A.Primitive _di x e                    -> hl x <> hl e
       A.Mutual _mi ds                        -> hl ds
+      A.RealInterleaved _mi ss ds            -> hl ss <> hl ds
       A.Section _r er x tel ds               -> hl er <> hl x <> hl tel <> hl ds
       A.Apply mi er x a _ci dir              -> hl mi <> hl er <> hl x <>
                                                 hl a <> hl dir

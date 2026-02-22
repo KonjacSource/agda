@@ -166,6 +166,7 @@ checkDecl d = setCurrentRange d $ do
       A.Field{}                -> typeError FieldOutsideRecord
       A.Primitive i x e        -> meta $ checkPrimitive i x e
       A.Mutual i ds            -> mutual i $ checkMutual i ds
+      A.RealInterleaved i ss ds -> mutual i $ checkInterleaved i ss ds 
       A.Section _r er x tel ds -> meta $ checkSection er x tel ds
       A.Apply i er x mapp ci d -> meta $ checkSectionApplication i er x mapp ci d
       A.Import _ _ dir         -> none $ checkImportDirective dir
@@ -424,6 +425,7 @@ highlight_ hlmod d = do
     A.Field{}                -> __IMPOSSIBLE__
     A.Primitive{}            -> highlight d
     A.Mutual i ds            -> mapM_ (highlight_ DoHighlightModuleContents) $ deepUnscopeDecls ds
+    A.RealInterleaved i ss ds -> mapM_ (highlight_ DoHighlightModuleContents) $ deepUnscopeDecls (ss <> ds)
     A.Apply{}                -> highlight d
     A.Import{}               -> highlight d
     A.Pragma{}               -> highlight d
@@ -877,7 +879,7 @@ checkPragma r p = do
 -- block are returned.
 checkMutual :: Info.MutualInfo -> List1 A.Declaration -> TCM (MutualId, Set QName)
 checkMutual i ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero $ do
-
+  
   reportSDoc "tc.decl.mutual" 20 $ vcat $
       (("Checking mutual block" <+> text (show blockId)) <> ":") <|
       fmap (nest 2 . prettyA) ds
@@ -889,7 +891,33 @@ checkMutual i ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero $ do
 
   (blockId, ) . mutualNames <$> lookupMutualBlock blockId
 
-    -- check record or data type signature
+checkInterleaved :: Info.MutualInfo -> List1 A.Declaration -> List1 A.Declaration -> TCM (MutualId, Set QName)
+checkInterleaved i ss ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero $ do 
+   
+  insertMutualBlockInfo blockId i
+  
+  localTC ( set eTerminationCheck (() <$ Info.mutualTerminationCheck i)
+          . set eCoverageCheck (Info.mutualCoverageCheck i)
+          . set eInterleavedMutual True) $ do 
+    mapM_ checkDecl (ss <> ds) 
+  
+  -- Coverage check
+  let funs = List1.toList ss >>= \case 
+        A.FunDef _ n _ -> pure n 
+        _ -> []
+
+  -- cov funs
+
+  (blockId, ) . mutualNames <$> lookupMutualBlock blockId
+  where 
+    -- cov1 name = do 
+    --   f <- getConstInfo name
+    --   let cs = defClauses f
+    --   (cs, CPC isOneIxs) <- return $ (second mconcat . unzip) cs
+
+      
+
+-- check record or data type signature
 checkSig ::
   KindOfName -> A.DefInfo -> Erased -> QName -> A.GeneralizeTelescope ->
   A.Expr -> TCM ()
@@ -1172,6 +1200,7 @@ instance ShowHead A.Declaration where
       A.Field        {} -> "Field"
       A.Primitive    {} -> "Primitive"
       A.Mutual       {} -> "Mutual"
+      A.RealInterleaved{} -> "Interleaved"
       A.Section      {} -> "Section"
       A.Apply        {} -> "Apply"
       A.Import       {} -> "Import"

@@ -452,6 +452,7 @@ instance Pretty Declaration where
                              <+> equals <+> pretty p
     Mutual _ ds     -> namedBlock "mutual" ds
     InterleavedMutual _ ds  -> namedBlock "interleaved mutual" ds
+    RealInterleavedMutual _ sigs ds -> sep [ namedBlock "mutual'" sigs, namedBlock "where" ds]
     LoneConstructor _ ds -> namedBlock "data _ where" ds
     Abstract _ ds   -> namedBlock "abstract" ds
     Private _ _ ds  -> namedBlock "private" ds

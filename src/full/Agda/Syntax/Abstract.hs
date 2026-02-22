@@ -201,6 +201,7 @@ data Declaration
   | Field      DefInfo QName (Arg Type)              -- ^ record field
   | Primitive  DefInfo QName (Arg Type)              -- ^ primitive function
   | Mutual     MutualInfo (List1 Declaration)        -- ^ a bunch of mutually recursive definitions
+  | RealInterleaved MutualInfo (List1 Declaration) (List1 Declaration)
   | Section    Range Erased ModuleName GeneralizeTelescope [Declaration]
   | Apply      ModuleInfo Erased ModuleName ModuleApplication
                ScopeCopyInfo ImportDirective
@@ -720,6 +721,7 @@ instance HasRange Declaration where
     getRange (Generalize _ i _ _ _)    = getRange i
     getRange (Field      i _ _      )  = getRange i
     getRange (Mutual     i _        )  = getRange i
+    getRange (RealInterleaved i _ _)   = getRange i 
     getRange (Section    i _ _ _ _  )  = getRange i
     getRange (Apply      i _ _ _ _ _)  = getRange i
     getRange (Import     i _ _      )  = getRange i
@@ -860,6 +862,7 @@ instance KillRange Declaration where
   killRange (Generalize s i j x e     ) = killRangeN (Generalize s) i j x e
   killRange (Field      i a b         ) = killRangeN Field      i a b
   killRange (Mutual     i a           ) = killRangeN Mutual     i a
+  killRange (RealInterleaved i s d    ) = killRangeN RealInterleaved i s d 
   killRange (Section    i a b c d     ) = killRangeN Section    i a b c d
   killRange (Apply      i a b c d e   ) = killRangeN Apply      i a b c d e
   killRange (Import     i a b         ) = killRangeN Import     i a b
@@ -1185,6 +1188,7 @@ data DeclarationSpine
   | FieldS
   | PrimitiveS
   | MutualS (List1 DeclarationSpine)
+  | InterleavedS (List1 DeclarationSpine) (List1 DeclarationSpine)
   | SectionS [DeclarationSpine]
   | ApplyS
   | ImportS
@@ -1231,6 +1235,7 @@ declarationSpine = \case
   Field _ _ _             -> FieldS
   Primitive _ _ _         -> PrimitiveS
   Mutual _ ds             -> MutualS (fmap declarationSpine ds)
+  RealInterleaved _ ss ds -> InterleavedS (fmap declarationSpine ss) (fmap declarationSpine ds)
   Section _ _ _ _ ds      -> SectionS (map declarationSpine ds)
   Apply _ _ _ _ _ _       -> ApplyS
   Import _ _ _            -> ImportS

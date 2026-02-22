@@ -261,7 +261,8 @@ reportSDoc :: MonadDebug m => VerboseKey -> VerboseLevel -> TCM Doc -> m ()
 #ifdef DEBUG
 reportSDoc = alwaysReportSDoc
 #else
-reportSDoc _ _ _ = pure ()
+reportSDoc = alwaysReportSDoc
+-- reportSDoc _ _ _ = pure ()
 #endif
 {-# INLINE reportSDoc #-}
 

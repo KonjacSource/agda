@@ -469,6 +469,7 @@ instance ExprLike Declaration where
       Field i x e               -> Field i x <$> rec e
       Primitive i x e           -> Primitive i x <$> rec e
       Mutual i ds               -> Mutual i <$> rec ds
+      RealInterleaved i ss ds   -> RealInterleaved i <$> rec ss <*> rec ds
       Section i e m tel ds      -> Section i e m <$> rec tel <*> rec ds
       Apply i e m a ci d        -> (\a -> Apply i e m a ci d) <$> rec a
       Import{}                  -> pure d
@@ -541,6 +542,7 @@ instance DeclaredNames Declaration where
       Field _ q _                  -> singleton (WithKind FldName q)
       Primitive _ q _              -> singleton (WithKind PrimName q)
       Mutual _ decls               -> declaredNames decls
+      RealInterleaved _ ss decls       -> declaredNames ss 
       DataSig _ _ q _ _            -> singleton (WithKind DataName q)
       DataDef _ q _ _ decls        -> singleton (WithKind DataName q) <> foldMap con decls
       RecSig _ _ q _ _             -> singleton (WithKind RecName q)

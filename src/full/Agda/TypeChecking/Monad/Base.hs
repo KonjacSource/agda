@@ -162,6 +162,7 @@ data TCState = TCSt
     -- ^ The state which is frozen after scope checking.
   , stPostScopeState  :: !PostScopeState
     -- ^ The state which is modified after scope checking.
+  -- , stDelayedCoverageCheck :: [TCM ()]
   }
   deriving Generic
 
@@ -565,6 +566,7 @@ initStateFromPersistentState s = TCSt
   { stPersistentState = s
   , stPreScopeState   = initPreScopeState
   , stPostScopeState  = initPostScopeState
+  -- , stDelayedCoverageCheck = []
   }
 
 -- * Lenses for 'TCState'
@@ -579,6 +581,9 @@ lensPreScopeState f s = f (stPreScopeState s) <&> \ x -> s { stPreScopeState = x
 
 lensPostScopeState :: Lens' TCState PostScopeState
 lensPostScopeState f s = f (stPostScopeState s) <&> \ x -> s { stPostScopeState = x }
+
+-- lensDelayedCoverageCheck :: Lens' TCState [() -> ()]
+-- lensDelayedCoverageCheck f s = f (stDelayedCoverageCheck s) <&> \ x -> s { stDelayedCoverageCheck = x }
 
 -- ** Components of 'SessionTCState'
 
@@ -4115,6 +4120,7 @@ data TCEnv =
             --   from the top-level module; it depends on in which order Agda
             --   chooses to chase dependencies.
           , envMutualBlock         :: Maybe MutualId -- ^ the current (if any) mutual block
+          , envInterleavedMutual   :: Bool -- ^ This is used both in scope and type check
           , envTerminationCheck    :: TerminationCheck ()  -- ^ are we inside the scope of a termination pragma
           , envCoverageCheck       :: CoverageCheck        -- ^ are we inside the scope of a coverage pragma
           , envMakeCase            :: Bool                 -- ^ are we inside a make-case (if so, ignore forcing analysis in unifier)
@@ -4267,6 +4273,7 @@ initEnv = TCEnv { envContext             = []
                 , envAnonymousModules    = []
                 , envImportStack         = []
                 , envMutualBlock         = Nothing
+                , envInterleavedMutual   = False
                 , envTerminationCheck    = TerminationCheck
                 , envCoverageCheck       = YesCoverageCheck
                 , envMakeCase            = False
@@ -4367,6 +4374,9 @@ eImportStack f e = f (envImportStack e) <&> \ x -> e { envImportStack = x }
 
 eMutualBlock :: Lens' TCEnv (Maybe MutualId)
 eMutualBlock f e = f (envMutualBlock e) <&> \ x -> e { envMutualBlock = x }
+
+eInterleavedMutual :: Lens' TCEnv Bool 
+eInterleavedMutual f e = f (envInterleavedMutual e) <&> \ x -> e { envInterleavedMutual = x }
 
 eTerminationCheck :: Lens' TCEnv (TerminationCheck ())
 eTerminationCheck f e = f (envTerminationCheck e) <&> \ x -> e { envTerminationCheck = x }

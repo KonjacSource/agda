@@ -56,8 +56,8 @@ module Agda.Syntax.Concrete.Definitions
 import Prelude hiding (null)
 
 import Control.Monad.Except  ( )
-import Control.Monad.Reader  ( asks )
-import Control.Monad.State   ( MonadState(..), gets, runStateT )
+import Control.Monad.Reader  ( asks , local)
+import Control.Monad.State   ( MonadState(..), gets, runStateT, modify )
 
 import Data.Either           ( isRight )
 import Data.Foldable         qualified as Fold
@@ -155,6 +155,7 @@ declKind Axiom{}                             = OtherDecl
 declKind NiceField{}                         = OtherDecl
 declKind PrimitiveFunction{}                 = OtherDecl
 declKind NiceMutual{}                        = OtherDecl
+declKind NiceRealInterleaved{}               = OtherDecl
 declKind NiceModule{}                        = OtherDecl
 declKind NiceModuleMacro{}                   = OtherDecl
 declKind NiceOpen{}                          = OtherDecl
@@ -319,6 +320,7 @@ niceDeclarations fixs ds = do
           covCheck  <- use coverageCheckPragma
           catchall  <- popCatchallPragma
           xs <- loneFuns <$> use loneSigs
+          interleaved <- asks checkingInterleaved
           -- for each type signature 'x' waiting for clauses, we try
           -- if we have some clauses for 'x'
           case [ (x, (x', fits, rest))
@@ -346,7 +348,8 @@ niceDeclarations fixs ds = do
             -- case: clauses match exactly one of the sigs
             [(x, (Arg info x', fits, rest))] -> do
                -- The x'@NoName{} is the unique version of x@NoName{}.
-               removeLoneSig x
+               unless interleaved $ removeLoneSig x
+               modify (\ s -> s { _delayedLoneSigs = x : _delayedLoneSigs s })
                ds <- expandEllipsis1 fits
                cs <- mkClauses1 info x' ds empty
                return ([FunDef (getRange fits) fits ConcreteDef NotInstanceDef termCheck covCheck x' cs] , rest)
@@ -449,6 +452,19 @@ niceDeclarations fixs ds = do
           case ds' of
             [] -> justWarning $ EmptyMutual r
             _  -> (,ds) . maybeToList <$> (mkInterleavedMutual r =<< nice ds')
+
+        RealInterleavedMutual r sig ds' -> do 
+          (,ds) . maybeToList <$> do 
+            nsig <- nice sig
+            nds' <- local (\ e -> e { checkingInterleaved = True }) $ nice ds'
+            removing <- gets _delayedLoneSigs
+            forM_ removing removeLoneSig
+            modify (\ s -> s { _delayedLoneSigs = [] })
+            -- QU:TODO: Better error message & making sure there should only be functions and datatypes in interleaved block
+            case (sig, ds') of 
+              ([], _) -> error "TODO: Better Message" 
+              (_, []) -> error "TODO: Better Message"
+              _ -> mkRealInterleaved r (List1.fromList nsig) (List1.fromList nds') 
 
         Abstract r []  -> justWarning $ EmptyAbstract r
         Abstract r ds' ->
@@ -916,6 +932,10 @@ niceDeclarations fixs ds = do
        hasEllipsis p || couldBeCallOf mFixity x p
     couldBeFunClauseOf _ _ _ = False -- trace ("couldBe not (fun default)") $ False
 
+    mkRealInterleaved :: KwRange -> List1 NiceDeclaration -> List1 NiceDeclaration -> Nice (Maybe NiceDeclaration)
+    mkRealInterleaved kwr sig ds' = do 
+      return $ Just $ NiceRealInterleaved kwr TerminationCheck YesCoverageCheck YesPositivityCheck sig ds'
+
     -- Turn a new style `interleaved mutual' block into a new style mutual block
     -- by grouping the declarations in blocks.
     mkInterleavedMutual
@@ -1134,6 +1154,7 @@ niceDeclarations fixs ds = do
             NiceMutual{}        -> invalid "mutual blocks"
             -- Andreas, 2018-10-29, issue #3246
             -- We could allow modules (top), but this is potentially confusing.
+            NiceRealInterleaved{} -> invalid "interleaved mutual blocks"
             NiceModule{}        -> invalid "Module definitions"
             -- Lone constructors are only allowed in new-style mutual blocks
             NiceLoneConstructor{} -> invalid "Lone constructors"
@@ -1251,6 +1272,7 @@ niceDeclarations fixs ds = do
         termCheck (NiceMutual _ tc _ _ _)            = tc
         termCheck (NiceUnquoteDecl _ _ _ _ tc _ _ _) = tc
         termCheck (NiceUnquoteDef _ _ _ tc _ _ _)    = tc
+        termCheck (NiceRealInterleaved _ tc _ _ _ _) = tc
         termCheck Axiom{}               = TerminationCheck
         termCheck NiceField{}           = TerminationCheck
         termCheck PrimitiveFunction{}   = TerminationCheck
@@ -1277,6 +1299,7 @@ niceDeclarations fixs ds = do
         covCheck (NiceMutual _ _ cc _ _)            = cc
         covCheck (NiceUnquoteDecl _ _ _ _ _ cc _ _) = cc
         covCheck (NiceUnquoteDef _ _ _ _ cc _ _)    = cc
+        covCheck (NiceRealInterleaved _ _ cc _ _ _) = cc
         covCheck Axiom{}               = YesCoverageCheck
         covCheck NiceField{}           = YesCoverageCheck
         covCheck PrimitiveFunction{}   = YesCoverageCheck
@@ -1359,6 +1382,7 @@ niceDeclarations fixs ds = do
         FunSig r p a i m rel tc cc x e -> (\ i -> FunSig r p a i m rel tc cc x e) <$> setInstance r0 i
         NiceUnquoteDecl r p a i tc cc x e -> (\ i -> NiceUnquoteDecl r p a i tc cc x e) <$> setInstance r0 i
         NiceMutual r tc cc pc ds       -> NiceMutual r tc cc pc <$> mapM (mkInstance r0) ds
+        NiceRealInterleaved r tc cc pc ss ds -> NiceRealInterleaved r tc cc pc <$> mapM (mkInstance r0) ss <*> mapM (mkInstance r0) ds
         NiceLoneConstructor r ds       -> NiceLoneConstructor r <$> mapM (mkInstance r0) ds
         d@NiceFunClause{}              -> return d
         FunDef r ds a i tc cc x cs     -> (\ i -> FunDef r ds a i tc cc x cs) <$> setInstance r0 i
@@ -1442,7 +1466,8 @@ instance MakeAbstract IsAbstract where
 instance MakeAbstract NiceDeclaration where
   mkAbstract :: KwRange -> UpdaterT Nice NiceDeclaration
   mkAbstract kwr = \case
-    NiceMutual r termCheck cc pc ds      -> NiceMutual r termCheck cc pc <$> mkAbstract kwr ds
+    NiceMutual r tc cc pc ds      -> NiceMutual r tc cc pc <$> mkAbstract kwr ds
+    NiceRealInterleaved r tc cc pc ss ds -> NiceRealInterleaved r tc cc pc <$> mkAbstract kwr ss <*> mkAbstract kwr ds
     NiceLoneConstructor r ds             -> NiceLoneConstructor r <$> mkAbstract kwr ds
     FunDef r ds a i tc cc x cs           -> (\ a -> FunDef r ds a i tc cc x) <$> mkAbstract kwr a <*> mkAbstract kwr cs
     NiceDataDef r o a pc uc x ps cs      -> (\ a -> NiceDataDef r o a pc uc x ps) <$> mkAbstract kwr a <*> mkAbstract kwr cs
@@ -1529,6 +1554,7 @@ instance MakePrivate NiceDeclaration where
       NiceField r p a i tac x e                -> (\ p -> NiceField r p a i tac x e)            <$> mkPrivate kwr o p
       PrimitiveFunction r p a x e              -> (\ p -> PrimitiveFunction r p a x e)          <$> mkPrivate kwr o p
       NiceMutual r tc cc pc ds                 -> (\ ds-> NiceMutual r tc cc pc ds)             <$> mkPrivate kwr o ds
+      NiceRealInterleaved r tc cc pc ss ds     -> NiceRealInterleaved r tc cc pc <$> mkPrivate kwr o ss <*> mkPrivate kwr o ds
       NiceModule r p a e x tel ds              -> (\ p -> NiceModule r p a e x tel ds)          <$> mkPrivate kwr o p
       NiceModuleMacro r p e x ma op is         -> (\ p -> NiceModuleMacro r p e x ma op is)     <$> mkPrivate kwr o p
       FunSig r p a i m rel tc cc x e           -> (\ p -> FunSig r p a i m rel tc cc x e)       <$> mkPrivate kwr o p
@@ -1650,6 +1676,7 @@ notSoNiceDeclarations = \case
     NiceField _ _ _ i tac x argt     -> singleton $ FieldSig i tac x argt
     PrimitiveFunction _ _ _ x e      -> singleton $ Primitive empty $ singleton $ TypeSig (argInfo e) empty x (unArg e)
     NiceMutual r _ _ _ ds            -> singleton $ Mutual r $ List1.toList $ sconcat $ fmap notSoNiceDeclarations ds
+    NiceRealInterleaved r _ _ _ ss ds-> singleton $ RealInterleavedMutual r (List1.toList $ sconcat $ fmap notSoNiceDeclarations ss) (List1.toList $ sconcat $ fmap notSoNiceDeclarations ds)
     NiceLoneConstructor r ds         -> singleton $ LoneConstructor r $ List1.concat $ fmap notSoNiceDeclarations ds
     NiceModule r _ _ e x tel ds      -> singleton $ Module r e x tel ds
     NiceModuleMacro r _ e x ma o dir
@@ -1681,6 +1708,7 @@ niceHasAbstract = \case
     NiceField _ _ a _ _ _ _       -> Just a
     PrimitiveFunction _ _ a _ _   -> Just a
     NiceMutual{}                  -> Nothing
+    NiceRealInterleaved{}         -> Nothing
     NiceLoneConstructor{}         -> Nothing
     NiceModule _ _ a _ _ _ _      -> Just a
     NiceModuleMacro{}             -> Nothing

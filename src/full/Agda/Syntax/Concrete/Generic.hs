@@ -250,6 +250,7 @@ instance ExprLike Declaration where
      e@PatternSyn{}            -> e
      Mutual    r ds            -> Mutual    r                          $ mapE ds
      InterleavedMutual r ds    -> InterleavedMutual r                  $ mapE ds
+     RealInterleavedMutual r sigs ds -> RealInterleavedMutual r (mapE sigs) (mapE ds)
      LoneConstructor r ds      -> LoneConstructor r                    $ mapE ds
      Abstract  r ds            -> Abstract  r                          $ mapE ds
      Private   r o ds          -> Private   r o                        $ mapE ds
@@ -314,6 +315,7 @@ instance FoldDecl Declaration where
     Abstract _          ds  -> foldDecl f ds
     InstanceB _         ds  -> foldDecl f ds
     InterleavedMutual _ ds  -> foldDecl f ds
+    RealInterleavedMutual _ sigs ds -> foldDecl f (sigs ++ ds)
     LoneConstructor _   ds  -> foldDecl f ds
     Mutual _            ds  -> foldDecl f ds
     Module _ _ _ _      ds  -> foldDecl f ds
@@ -368,6 +370,7 @@ instance TraverseDecl Declaration where
       Abstract r          ds     -> Abstract r              <$> preTraverseDecl f ds
       InstanceB r         ds     -> InstanceB r             <$> preTraverseDecl f ds
       InterleavedMutual r ds     -> InterleavedMutual r     <$> preTraverseDecl f ds
+      RealInterleavedMutual r sig ds -> RealInterleavedMutual r <$> preTraverseDecl f sig <*> preTraverseDecl f ds
       LoneConstructor r   ds     -> LoneConstructor r       <$> preTraverseDecl f ds
       Mutual r            ds     -> Mutual r                <$> preTraverseDecl f ds
       Module r er n tel   ds     -> Module r er n tel       <$> preTraverseDecl f ds
