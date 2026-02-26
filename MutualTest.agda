@@ -1,5 +1,8 @@
 -- {-# OPTIONS --cubical #-}
+{-# OPTIONS -WnoUnreachableClauses #-}
 -- open import Cubical.Core.Everything
+o7 : (a : Set) → a → a 
+o7 _ x = x
 
 interleaved mutual
   data AA : Set
@@ -40,3 +43,4 @@ module _ (AAᴹ : AA → Set) (BBᴹ : ∀ {x} → AAᴹ x → BB x → Set)
       elimA (g x) = gᴹ (elimB x) 
 
       elimB (h y) = hᴹ (elimB y)
+

@@ -7,7 +7,6 @@ module Agda.TypeChecking.Rules.Decl where
 import Prelude hiding ( null )
 
 import Control.Monad.Writer (tell)
-
 import Data.Either (partitionEithers)
 import qualified Data.Foldable as Fold
 import qualified Data.Map.Strict as MapS
@@ -61,6 +60,7 @@ import Agda.TypeChecking.Rules.Term
 import Agda.TypeChecking.Rules.Data    ( checkDataDef )
 import Agda.TypeChecking.Rules.Record  ( checkRecDef )
 import Agda.TypeChecking.Rules.Def     ( checkFunDef, newSection, useTerPragma )
+import Agda.TypeChecking.CompiledClause.Compile ( compileClauses )
 import Agda.TypeChecking.Rules.Builtin
 import Agda.TypeChecking.Rules.Display ( checkDisplayPragma )
 
@@ -893,7 +893,7 @@ checkMutual i ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero $ do
 
 checkInterleaved :: Info.MutualInfo -> List1 A.Declaration -> List1 A.Declaration -> TCM (MutualId, Set QName)
 checkInterleaved i ss ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero $ do 
-   
+  -- liftIO $ putStrLn $ "Checking Interleaved."
   insertMutualBlockInfo blockId i
   
   localTC ( set eTerminationCheck (() <$ Info.mutualTerminationCheck i)
@@ -901,20 +901,44 @@ checkInterleaved i ss ds = inMutualBlock $ \ blockId -> defaultOpenLevelsToZero 
           . set eInterleavedMutual True) $ do 
     mapM_ checkDecl (ss <> ds) 
   
-  -- Coverage check
-  let funs = List1.toList ss >>= \case 
-        A.FunDef _ n _ -> pure n 
+  let funs' ss = ss >>= \case 
+        A.Axiom FunName _ _ _ n _ -> pure n
+        A.ScopedDecl _ ds -> funs' $ List1.toList ds
         _ -> []
+      funs = funs' $ List1.toList ss 
+  forM_ funs $ \ name -> do
+    inTopContext $ do
+      info' <- getConstInfo name
+      let t = defType info'
+          cs = defClauses info'
+      -- Build the full type by quantifying over the current context.
+      fullType <- flip telePi t <$> getContextTelescope
+      -- run the clause compiler which performs coverage checking
+      (mst, _recordExpressionBecameCopatternLHS, cc) <- compileClauses (Just (name, fullType)) cs
+      cs <- defClauses <$> getConstInfo name
+      covering <- funCovering . theDef <$> getConstInfo name
+      addConstant name =<< do
+        -- Ignored inlined
+        let defn = FunctionDefn $
+                    -- set funMacro_ (ismacro || Info.defMacro i == MacroDef) $
+                    -- set funAbstr_ (Info.defAbstract i) $
+                    case theDef info' of
+                      FunctionDefn f -> f 
+                        { _funClauses        = cs
+                        , _funCompiled       = Just cc
+                        , _funSplitTree      = mst
+                        , _funCovering       = covering
+                        }
+                      _ -> __IMPOSSIBLE__
+        lang <- getLanguage
+        useTerPragma $
+          updateDefCopatternLHS (const False) $
+          (defaultDefn (defArgInfo info') name fullType lang defn)
 
-  -- cov funs
-
+      pure ()
+  
+  -- liftIO $ putStrLn "Done."
   (blockId, ) . mutualNames <$> lookupMutualBlock blockId
-  where 
-    -- cov1 name = do 
-    --   f <- getConstInfo name
-    --   let cs = defClauses f
-    --   (cs, CPC isOneIxs) <- return $ (second mconcat . unzip) cs
-
       
 
 -- check record or data type signature
