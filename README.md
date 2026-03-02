@@ -40,8 +40,7 @@ interleaved mutual
 
     data Cx where 
       𝟏 : Cx 
-      _⸴_ : (Γ : Cx) → Ty Γ → Cx
-    
+      _⸴_ : (Γ : Cx) → Ty Γ → Cx   
 
     data Sb where 
       id : Sb Γ Γ
@@ -53,8 +52,7 @@ interleaved mutual
       comp-id : (γ : Sb Δ Γ) → γ ∘ id ≡ γ
       comp-assoc : (γ₀ : Sb Γ₁ Γ₀) (γ₁ : Sb Γ₂ Γ₁) (γ₂ : Sb Γ₃ Γ₂) →
                     γ₀ ∘ (γ₁ ∘ γ₂) ≡ (γ₀ ∘ γ₁) ∘ γ₂
-      emp-uniq : (δ : Sb Γ 𝟏) → ! ≡ δ
-      
+      emp-uniq : (δ : Sb Γ 𝟏) → ! ≡ δ      
     
     data Ty where
       _[_] : (A : Ty Γ) (γ : Sb Δ Γ) → Ty Δ
@@ -68,7 +66,6 @@ interleaved mutual
     data Sb where 
       _⸴_ : (γ : Sb Δ Γ) {A : Ty Γ} (a : Tm Δ (A [ γ ])) → Sb Δ (Γ ⸴ A)             
       sub-init : (γ : Sb Δ Γ) (a : Tm Δ (A [ γ ])) → 𝐩 ∘ (γ ⸴ a) ≡ γ
-    
 
     data Tm where
       _[_] : (a : Tm Γ A) (γ : Sb Δ Γ) → Tm Δ (A [ γ ])

@@ -1,8 +1,4 @@
--- {-# OPTIONS --cubical #-}
 {-# OPTIONS -WnoUnreachableClauses #-}
--- open import Cubical.Core.Everything
-o7 : (a : Set) → a → a 
-o7 _ x = x
 
 interleaved mutual
   data AA : Set
